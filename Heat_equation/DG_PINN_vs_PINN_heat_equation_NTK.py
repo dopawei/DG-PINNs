@@ -235,7 +235,6 @@ def get_data(c, batch_sizes):
 
 
 def Adap_weights(model, X_train):
-
     # Zero out gradients
     model.zero_grad()
     # Get all parameters excluding those containing "lambda1" in their names
@@ -409,7 +408,7 @@ for seeds_num in seeds_nums:
 
     U_pred = U_pred.cpu().detach().numpy()    
     
-    savemat(f'../Results/dgpinn_heat_NTK_seed_{seeds_num}.mat',
+    savemat(f'dgpinn_heat_NTK_seed_{seeds_num}.mat',
             {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_true': U, 'loss_r': epoch_loss_r, 
               'loss_d': epoch_loss_d, 'beta': epoch_beta, 'lambda1': epoch_lambda1, 'lambda2': epoch_lambda2, 'time': t22 - t11})
     
@@ -474,6 +473,6 @@ for seeds_num in seeds_nums:
     U_pred = model(X_true['x'], X_true['t'])
     U_pred = U_pred.cpu().detach().numpy()    
     
-    savemat(f'../Results/pinn_heat_NTK_seed_{seeds_num}.mat',
+    savemat(f'pinn_heat_NTK_seed_{seeds_num}.mat',
             {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_true': U, 'loss_r': epoch_loss_r, 
               'loss_d': epoch_loss_d, 'beta': epoch_beta, 'lambda1': epoch_lambda1, 'lambda2': epoch_lambda2, 'time': t22 - t11})
