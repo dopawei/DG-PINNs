@@ -408,7 +408,7 @@ for data_num in data_nums:
 
     U_pred = U_pred.cpu().detach().numpy()    
     
-    savemat(f'../Results/dgpinn_heat_NTK_Nd_{data_num}.mat',
+    savemat(f'dgpinn_heat_NTK_Nd_{data_num}.mat',
             {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_true': U, 'loss_r': epoch_loss_r, 
               'loss_d': epoch_loss_d, 'beta': epoch_beta, 'lambda1': epoch_lambda1, 'lambda2': epoch_lambda2, 'time': t22 - t11})
     
