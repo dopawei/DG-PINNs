@@ -252,7 +252,6 @@ def get_data(c, batch_sizes, snr_db):
 
 
 def Adap_weights(model, X_train):
-
     # Zero out gradients
     model.zero_grad()
     # Get all parameters excluding those containing "lambda1" in their names
@@ -419,7 +418,7 @@ for snr in SNR:
 
     U_pred = U_pred.cpu().detach().numpy()    
     
-    savemat(f'../Results/dgpinn_heat_NTK_noise_SNR_{snr}.mat',
+    savemat(f'dgpinn_heat_NTK_noise_SNR_{snr}.mat',
             {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_noise': u_noisy.reshape(201,201), 'u_true': U, 'loss_r': epoch_loss_r, 
               'loss_d': epoch_loss_d, 'beta': epoch_beta, 'lambda1': epoch_lambda1, 'lambda2': epoch_lambda2, 'time': t22 - t11})
     
