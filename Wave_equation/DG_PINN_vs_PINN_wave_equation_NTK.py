@@ -253,7 +253,6 @@ def get_data(c, batch_sizes):
 
     return X, T, U, X_train, X_validation, X_test, X_true
 
-
 def Adap_weights(model, X_train):
     # Zero out gradients
     model.zero_grad()
