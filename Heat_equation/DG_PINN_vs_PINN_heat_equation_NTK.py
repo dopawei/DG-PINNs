@@ -8,7 +8,6 @@ from scipy.io import savemat
 from torch.autograd import grad
 from timeit import default_timer
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
 # Set default dtype to float32
 torch.set_default_dtype(torch.float32)
 
@@ -93,7 +92,6 @@ def closure():
         print('Epoch %d, loss = %e, loss_r = %e, loss_d = %e, beta = %e, lambda1= %e , lambda2= %e' %
               (iter_1 + model.epoch, float(loss), float(loss_r),  float(loss_d),
                 model.beta.item(), float(lambda1), float(lambda2)))
-
     model.epoch += 1
     return loss
 
@@ -116,7 +114,6 @@ def train_dg_pinn(model, optimizer, X_train, iters=50001, stopping_loss=1e-3,
 
         # Calculate relative L2 errors
         u_error = relative_l2_error(u_pred, X_validation['u'])
-
         # Stopping condition
         if u_error < stopping_loss:
             print(f'Stopping early at epoch {epoch} as relative l2 error fell below {stopping_loss}')
@@ -160,7 +157,6 @@ def train_pinn(model, optimizer, X_train, NTK, iters=50001, stopping_loss=1e-2):
         if u_error < stopping_loss:
             print(f'Stopping early at epoch {epoch} as relative l2 error fell below {stopping_loss}')
             break
-
 
 def get_data(c, batch_sizes):
     # Load and scale data
@@ -232,7 +228,6 @@ def get_data(c, batch_sizes):
               'u': torch.from_numpy(u_true).float().to(device)}
 
     return X, T, U, X_train, X_validation, X_test, X_true
-
 
 def Adap_weights(model, X_train):
     # Zero out gradients
@@ -379,8 +374,6 @@ for seeds_num in seeds_nums:
     for epoch in range(iter_2):
         optimizer.zero_grad()
         optimizer.step(closure)
-        
-        #current_loss = loss.item()
         u_pred = model(X_validation['x'], X_validation['t'])
         # Calculate relative L2 errors
         u_error = relative_l2_error(u_pred, X_validation['u'])
