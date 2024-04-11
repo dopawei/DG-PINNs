@@ -19,10 +19,10 @@ class PINN(nn.Module):
     def __init__(self, input_dim=3, output_dim=2, hidden_dim=50, num_hidden=3, activation='sin'):
         super(PINN, self).__init__()
 
-        self.layers = nn.ModuleList([nn.Linear(input_dim, hidden_dim, bias=False)])
+        self.layers = nn.ModuleList([nn.Linear(input_dim, hidden_dim)])
         for _ in range(num_hidden - 1):
-            self.layers.append(nn.Linear(hidden_dim, hidden_dim, bias=False))
-        self.layers.append(nn.Linear(hidden_dim, output_dim, bias=False))
+            self.layers.append(nn.Linear(hidden_dim, hidden_dim))
+        self.layers.append(nn.Linear(hidden_dim, output_dim))
 
         self.epoch = 0
         self.beta = nn.Parameter(torch.tensor([beta], requires_grad=True).float())
@@ -92,6 +92,7 @@ def closure():
         print('Epoch %d, loss = %e, loss_r = %e, loss_d = %e, beta = %e, lambda1= %e , lambda2= %e' %
               (iter_1 + model.epoch, float(loss), float(loss_r),  float(loss_d),
                 model.beta.item(), float(lambda1), float(lambda2)))
+
     model.epoch += 1
     return loss
 
@@ -114,6 +115,7 @@ def train_dg_pinn(model, optimizer, X_train, iters=50001, stopping_loss=1e-3,
 
         # Calculate relative L2 errors
         u_error = relative_l2_error(u_pred, X_validation['u'])
+
         # Stopping condition
         if u_error < stopping_loss:
             print(f'Stopping early at epoch {epoch} as relative l2 error fell below {stopping_loss}')
@@ -230,6 +232,7 @@ def get_data(c, batch_sizes):
     return X, T, U, X_train, X_validation, X_test, X_true
 
 def Adap_weights(model, X_train):
+
     # Zero out gradients
     model.zero_grad()
     # Get all parameters excluding those containing "lambda1" in their names
@@ -374,6 +377,8 @@ for seeds_num in seeds_nums:
     for epoch in range(iter_2):
         optimizer.zero_grad()
         optimizer.step(closure)
+        
+        #current_loss = loss.item()
         u_pred = model(X_validation['x'], X_validation['t'])
         # Calculate relative L2 errors
         u_error = relative_l2_error(u_pred, X_validation['u'])
@@ -405,7 +410,6 @@ for seeds_num in seeds_nums:
             {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_true': U, 'loss_r': epoch_loss_r, 
               'loss_d': epoch_loss_d, 'beta': epoch_beta, 'lambda1': epoch_lambda1, 'lambda2': epoch_lambda2, 'time': t22 - t11})
     
-
     # =============================================================================
     # TRAIN MODEL
     # =============================================================================

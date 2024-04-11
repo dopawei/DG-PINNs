@@ -20,10 +20,10 @@ class PINN(nn.Module):
     def __init__(self, input_dim=3, output_dim=2, hidden_dim=50, num_hidden=3, activation='sin'):
         super(PINN, self).__init__()
 
-        self.layers = nn.ModuleList([nn.Linear(input_dim, hidden_dim, bias=False)])
+        self.layers = nn.ModuleList([nn.Linear(input_dim, hidden_dim)])
         for _ in range(num_hidden - 1):
-            self.layers.append(nn.Linear(hidden_dim, hidden_dim, bias=False))
-        self.layers.append(nn.Linear(hidden_dim, output_dim, bias=False))
+            self.layers.append(nn.Linear(hidden_dim, hidden_dim))
+        self.layers.append(nn.Linear(hidden_dim, output_dim))
 
         self.epoch = 0
         self.beta = nn.Parameter(torch.tensor([beta], requires_grad=True).float())
@@ -193,6 +193,7 @@ def get_data(c, batch_sizes):
     id_initial = random_selection(id_initial, batch_sizes['initial'])
     id_bounds = random_selection(id_bounds, batch_sizes['bounds'])
     id_pde = random_selection(id_pde, batch_sizes['PDE'])
+    # id_data = random_selection(np.arange(total_points), batch_sizes['data'])
     id_data = random_selection(id_data, batch_sizes['data'])
 
     # Function to convert indices to tensor
@@ -222,7 +223,7 @@ def get_data(c, batch_sizes):
     X_validation = {'x': torch.from_numpy(x_true[id_validation, :]).float().to(device),
                     't': torch.from_numpy(t_true[id_validation, :]).float().to(device),
                     'u': torch.from_numpy(u_true[id_validation, :]).float().to(device)}
-    
+
     # Use the mask to select the remaining points for X_test
     X_test = {'x': torch.from_numpy(x_true[mask, :]).float().to(device),
               't': torch.from_numpy(t_true[mask, :]).float().to(device),
@@ -235,7 +236,8 @@ def get_data(c, batch_sizes):
 
     return X, T, U, X_train, X_validation, X_test, X_true
 
-def Adap_weights(model, X_trai
+def Adap_weights(model, X_train):
+
     # Zero out gradients
     model.zero_grad()
     # Get all parameters excluding those containing "lambda1" in their names
