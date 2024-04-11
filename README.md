@@ -5,5 +5,5 @@ Data-guided physics-informed neural networks
 Here we show the schematic of DG-PINNs for solving inverse problems in PDEs
 
 <p align="center">
-  <img src="DGPINN_diagram.png" width="600">
+  <img src="DGPINN_diagram.png" width="800">
 </p>
