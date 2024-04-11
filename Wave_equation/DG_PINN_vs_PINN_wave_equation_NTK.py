@@ -20,10 +20,10 @@ class PINN(nn.Module):
     def __init__(self, input_dim=3, output_dim=2, hidden_dim=50, num_hidden=3, activation='sin'):
         super(PINN, self).__init__()
 
-        self.layers = nn.ModuleList([nn.Linear(input_dim, hidden_dim, bias=False)])
+        self.layers = nn.ModuleList([nn.Linear(input_dim, hidden_dim)])
         for _ in range(num_hidden - 1):
-            self.layers.append(nn.Linear(hidden_dim, hidden_dim, bias=False))
-        self.layers.append(nn.Linear(hidden_dim, output_dim, bias=False))
+            self.layers.append(nn.Linear(hidden_dim, hidden_dim))
+        self.layers.append(nn.Linear(hidden_dim, output_dim))
 
         self.epoch = 0
         self.alpha = nn.Parameter(torch.tensor([alpha], requires_grad=True).float())
@@ -252,6 +252,7 @@ def get_data(c, batch_sizes):
               'u': torch.from_numpy(u_true).float().to(device)}
 
     return X, T, U, X_train, X_validation, X_test, X_true
+
 
 def Adap_weights(model, X_train):
     # Zero out gradients

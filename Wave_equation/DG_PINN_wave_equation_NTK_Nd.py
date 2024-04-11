@@ -141,20 +141,8 @@ def train_dg_pinn(model, optimizer, X_train, iters=50001, stopping_loss=1e-3,
             break
     return epoch_loss_d
 
-def add_noise(signal, snr_db):
-    # Calculate signal power and convert SNR from dB
-    signal_power = np.mean(signal ** 2)
-    snr_linear = 10 ** (snr_db / 10)
 
-    # Calculate noise power and generate noise
-    noise_power = signal_power / snr_linear
-    np.random.seed(seeds_num)
-    noise = np.random.normal(0, np.sqrt(noise_power), signal.shape)
-
-    # Add noise to the signal
-    return signal + noise
-
-def get_data(c, batch_sizes, snr_db):
+def get_data(c, batch_sizes):
     # Load and scale data
     x = np.linspace(0, 1, 201)
     t = np.linspace(0, 1, 201)
@@ -165,7 +153,6 @@ def get_data(c, batch_sizes, snr_db):
     x_true = X.flatten('C')[:, None]
     t_true = T.flatten('C')[:, None]
     u_true = U.flatten('C')[:, None]
-    u_noisy = add_noise(u_true, snr_db)  # For initial points in training
 
     # Total points
     total_points = len(x) * len(t)
@@ -192,7 +179,7 @@ def get_data(c, batch_sizes, snr_db):
         return {
             'x': torch.from_numpy(x_true[ids, :]).float().to(device),
             't': torch.from_numpy(t_true[ids, :]).float().to(device),
-            'u': torch.from_numpy(u_noisy[ids, :]).float().to(device)
+            'u': torch.from_numpy(u_true[ids, :]).float().to(device)
         }
 
     # Create dictionaries
@@ -213,7 +200,7 @@ def get_data(c, batch_sizes, snr_db):
 
     X_validation = {'x': torch.from_numpy(x_true[id_validation, :]).float().to(device),
                     't': torch.from_numpy(t_true[id_validation, :]).float().to(device),
-                    'u': torch.from_numpy(u_noisy[id_validation, :]).float().to(device)}
+                    'u': torch.from_numpy(u_true[id_validation, :]).float().to(device)}
 
     # Use the mask to select the remaining points for X_test
     X_test = {'x': torch.from_numpy(x_true[mask, :]).float().to(device),
@@ -225,7 +212,8 @@ def get_data(c, batch_sizes, snr_db):
               't': torch.from_numpy(t_true).float().to(device),
               'u': torch.from_numpy(u_true).float().to(device)}
 
-    return u_noisy, X, T, U, X_train, X_validation, X_test, X_true
+    return X, T, U, X_train, X_validation, X_test, X_true
+
 
 def Adap_weights(model, X_train):
     # Zero out gradients
@@ -303,7 +291,6 @@ def Adap_weights(model, X_train):
         grad_row = torch.cat([g.view(-1) if g is not None else torch.zeros(p.numel()) for g, p in zip(grads, param_tensors_cpu)])
         jacobian_b[i] = grad_row
 
-
     x = torch.cat([X_train['data']['x'].requires_grad_(), X_train['initial']['x'].requires_grad_()])
     t = torch.cat([X_train['data']['t'].requires_grad_(), X_train['initial']['t'].requires_grad_()])
     
@@ -318,11 +305,11 @@ def Adap_weights(model, X_train):
     for batch in range(batches):
         start_idx = batch * batch_size
         end_idx = min(start_idx + batch_size, total_data)
-        
+
         # Select batch data
         x_batch = x[start_idx:end_idx]
         t_batch = t[start_idx:end_idx]
-        
+    
         # Compute model predictions and derivatives for the batch
         u_pred = model(x_batch, t_batch)
         # Now process residuals_batch
@@ -369,18 +356,20 @@ seeds_num = 666
 torch.manual_seed(seeds_num)
 np.random.seed(seeds_num)
 alpha = np.random.rand()
-
-batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 1000, 'data': 10000, 'validation': 10000}
-epsilon_1 = 0.05
+epsilon_1 = 0.05  # Stopping criterion for Adam optimizer
 iter_1 = 200000 # Maximun number of iterations for Adam optimizer
 iter_2 = 20000  # Maximun number  of iterations for L-BFGS optimizer
-SNR = [40,35,30,25]
+data_nums = [100,200,300,400,500,1000,2000,3000,4000,5000,6000,7000,8000,9000,10000]
+batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 1000, 'data': 10000, 'validation': 10000}
+X, T, U, _, X_validation, X_test, X_true = get_data(lambda_1_true, batch_sizes)
+
 # =============================================================================
 # TRAIN MODEL
 # =============================================================================
-for snr in SNR:
+for data_num in data_nums:
     torch.manual_seed(seeds_num)
-    u_noisy, X, T, U, X_train, X_validation, X_test, X_true = get_data(lambda_1_true, batch_sizes, snr)
+    batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 1000, 'data': data_num, 'validation': 10000}
+    _,_,_, X_train, _, _, _ = get_data(lambda_1_true, batch_sizes)
     epoch_loss_r = []
     epoch_loss_i = []
     epoch_loss_b = []
@@ -416,12 +405,11 @@ for snr in SNR:
 
     t22 = default_timer()
     print('Time elapsed: %.2f min' % ((t22 - t11) / 60))
+
     # =============================================================================
     # SAVE DATA & MODEL
     # =============================================================================
-
     u_pred = model(X_test['x'], X_test['t'])
-        
     # Calculate relative L2 errors
     u_error = relative_l2_error(u_pred, X_test['u'])
     print(u_error.item())
@@ -430,7 +418,7 @@ for snr in SNR:
     U_pred = model(X_true['x'], X_true['t'])
     U_pred = U_pred.cpu().detach().numpy()    
     
-    savemat(f'dgpinn_wave_NTK_SNR_{snr}.mat',
-            {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_noise': u_noisy.reshape(201,201),'u_true': U, 'loss_r': epoch_loss_r, 'loss_i': epoch_loss_i,
+    savemat(f'dgpinn_wave_NTK_Nd_{data_num}.mat',
+            {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_true': U, 'loss_r': epoch_loss_r, 'loss_i': epoch_loss_i,
              'loss_b': epoch_loss_b,'loss_d': epoch_loss_d, 'alpha': epoch_alpha, 'lambda1': epoch_lambda1, 
              'lambda2': epoch_lambda2, 'lambda3': epoch_lambda3, 'lambda4': epoch_lambda4, 'time': t22 - t11})
