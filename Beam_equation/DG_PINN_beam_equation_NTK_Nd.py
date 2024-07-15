@@ -406,25 +406,27 @@ def relative_l2_error(pred, true):
 # =============================================================================
 # DATA & PARAMETERS
 # =============================================================================
+
 seeds_num = 666
 torch.manual_seed(seeds_num)
 np.random.seed(seeds_num)
 alpha = np.random.rand()
-
 alpha_true = 1
-
-batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 2000, 'data': 10000}
-X, T, U, X_train, X_test, X_true = get_data(alpha_true, batch_sizes)
-
-iter_1s = [2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 
-          15000, 20000, 25000, 30000, 40000, 50000]
+iter_1 = 20000 # Maximun number of iterations for Adam optimizer
 iter_2 = 10000  # Maximun number  of iterations for L-BFGS optimizer
+data_nums = [500, 600, 700, 800, 900, 1000, 2000, 3000, 4000,
+            5000, 6000, 7000, 8000, 9000, 10000]
+batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 2000, 'data': 10000}
+
+X, T, U, _, X_test, X_true = get_data(alpha_true, batch_sizes)
 
 # =============================================================================
 # TRAIN MODEL
 # =============================================================================
-for iter_1 in iter_1s:
+for data_num in data_nums:
     torch.manual_seed(seeds_num)
+    batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 2000, 'data': data_num}
+    _,_,_, X_train, _, _ = get_data(alpha_true, batch_sizes)
     epoch_loss_r = []
     epoch_loss_i1 = []
     epoch_loss_i2 = []
@@ -439,7 +441,6 @@ for iter_1 in iter_1s:
     epoch_lambda_b2 = []
     epoch_lambda_d = []
 
-
     model = PINN(
         input_dim=2,
         output_dim=1,
@@ -453,7 +454,7 @@ for iter_1 in iter_1s:
     # Adam optimizer to decrease loss in Phase 1
     optimizer = torch.optim.Adam(list(model.parameters()), lr=1e-3)
     train_dg_pinn(model, optimizer, X_train, iters=iter_1)
-            
+
     lambda_r, lambda_i1, lambda_i2, lambda_b1, lambda_b2, lambda_d = Adap_weights(model, X_train)
 
     # L-BFGS optimizer for fine-tuning in Phase 2
@@ -464,7 +465,8 @@ for iter_1 in iter_1s:
         optimizer.step(closure)
 
     t22 = default_timer()
-    print('Time elapsed: %.2f min' % ((t22 - t11) / 60), 'alpha: %.4f' % (model.alpha.item()))
+    print('Time elapsed: %.2f min' % ((t22 - t11) / 60))
+    
     # =============================================================================
     # SAVE DATA & MODEL
     # =============================================================================
@@ -480,10 +482,12 @@ for iter_1 in iter_1s:
     U_pred = model(X_true['x'], X_true['t'])
     U_pred = U_pred.cpu().detach().numpy()    
     
-    savemat(f'dgpinn_beam_NTK_iter_1_{iter_1}.mat',
+    savemat(f'dgpinn_beam_Nd_{data_num}.mat',  
             {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_true': U, 'loss_r': epoch_loss_r, 'loss_i1': epoch_loss_i1,
-             'loss_i2': epoch_loss_i2, 'loss_b1': epoch_loss_b1,'loss_b2': epoch_loss_b2,'loss_d': epoch_loss_d, 'alpha': epoch_alpha, 'lambda_r': epoch_lambda_r, 
-             'lambda_i1': epoch_lambda_i1, 'lambda_i2': epoch_lambda_i2, 'lambda_b1': epoch_lambda_b1, 'lambda_b2': epoch_lambda_b2,'lambda_d': epoch_lambda_d, 'time': t22 - t11})
-    
+            'loss_i2': epoch_loss_i2, 'loss_b1': epoch_loss_b1,'loss_b2': epoch_loss_b2,'loss_d': epoch_loss_d, 'alpha': epoch_alpha, 'lambda_r': epoch_lambda_r, 
+            'lambda_i1': epoch_lambda_i1, 'lambda_i2': epoch_lambda_i2, 'lambda_b1': epoch_lambda_b1, 'lambda_b2': epoch_lambda_b2,'lambda_d': epoch_lambda_d, 'time': t22 - t11})
+
+
+  
 
   
