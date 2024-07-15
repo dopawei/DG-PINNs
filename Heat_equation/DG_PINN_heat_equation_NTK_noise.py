@@ -16,6 +16,7 @@ torch.set_default_dtype(torch.float32)
 # CREATE PHYSICS-INFORMED NEURAL NETWORK
 # =============================================================================
 
+
 class PINN(nn.Module):
     def __init__(self, input_dim=3, output_dim=2, hidden_dim=50, num_hidden=3, activation='sin'):
         super(PINN, self).__init__()
@@ -34,6 +35,8 @@ class PINN(nn.Module):
             self.activation = torch.tanh
         elif activation == 'cos':
             self.activation = torch.cos
+        elif activation == 'silu':
+            self.activation = torch.nn.functional.silu
 
     def forward(self, x, t):
         out = torch.cat([x, t], dim=-1)
@@ -54,7 +57,24 @@ class PINN(nn.Module):
         residual = u_t - self.beta**2*u_xx
         loss_r = torch.mean(residual ** 2)
         return loss_r
+    
+    def loss_initial(self, x, t):    
+        x = x.requires_grad_()
+        t = t.requires_grad_()
+        u_pred = self.forward(x, t)
+        u_0 = torch.sin(10*np.pi*x)
 
+        loss_i = torch.mean((u_pred - u_0) ** 2)
+        return loss_i
+    
+    def loss_bounds(self, x, t):    
+        x = x.requires_grad_()
+        t = t.requires_grad_()
+        u_pred = self.forward(x, t)
+
+        loss_b = torch.mean(u_pred ** 2)
+        return loss_b
+    
     def loss_data(self, x, t, u):    
         u_pred = self.forward(x, t) 
         loss_d = torch.mean((u_pred - u) ** 2)
@@ -62,41 +82,47 @@ class PINN(nn.Module):
     
     def losses(self, X_train):
         loss_r = self.loss_PDE(X_train['PDE']['x'], X_train['PDE']['t'])
-        loss_d = self.loss_data(X_train['data']['x'], X_train['data']['t'], X_train['data']['u']) +\
-                 self.loss_data(X_train['initial']['x'], X_train['initial']['t'], X_train['initial']['u']) +\
-                 self.loss_data(X_train['bounds']['x'], X_train['bounds']['t'], X_train['bounds']['u']) 
-        return loss_r, loss_d/3
+        loss_i = self.loss_initial(X_train['initial']['x'], X_train['initial']['t'])
+        loss_b = self.loss_bounds(X_train['bounds']['x'], X_train['bounds']['t'])
+        loss_d = self.loss_data(X_train['data']['x'], X_train['data']['t'], X_train['data']['u']) 
+        return loss_r, loss_i, loss_b, loss_d
     
 def closure():
-    global lambda1, lambda2
+    global lambda1, lambda2, lambda3, lambda4
     
     optimizer.zero_grad()
 
     # Calculate losses
-    loss_r, loss_d = model.losses(X_train)
+    loss_r, loss_i, loss_b, loss_d = model.losses(X_train)
 
     # Calculate total loss with updated beta1
-    loss = lambda1*loss_r + lambda2*loss_d
+    loss = lambda1*loss_r + lambda2*loss_i + lambda3*loss_b + lambda4*loss_d
 
     # Backpropagation
     loss.backward()
 
     # Append losses for monitoring
     epoch_loss_r.append(loss_r.item())
+    epoch_loss_b.append(loss_b.item())
+    epoch_loss_i.append(loss_i.item())
     epoch_loss_d.append(loss_d.item())
+
     epoch_beta.append(model.beta.item())
+    
     epoch_lambda1.append(lambda1)
     epoch_lambda2.append(lambda2)
+    epoch_lambda3.append(lambda3)
+    epoch_lambda4.append(lambda4)
     
     # Print losses infrequently to avoid slowing down training
     if model.epoch % 10000 == 0:
-        print('Epoch %d, loss = %e, loss_r = %e, loss_d = %e, beta = %e, lambda1= %e , lambda2= %e' %
-              (iter_1 + model.epoch, float(loss), float(loss_r),  float(loss_d),
-                model.beta.item(), float(lambda1), float(lambda2)))
-
+        # lambda1, lambda2, lambda3 = Adap_weights(model, X_train)
+        print('Epoch %d,  loss = %e, loss_r = %e, loss_i = %e, loss_b = %e, loss_d = %e, beta = %e, lambda1= %e , lambda2= %e, lambda3= %e, lambda4=%e' %
+                (epoch, float(loss), float(loss_r), float(loss_i), float(loss_b), float(loss_d),
+                model.beta.item(), float(lambda1), float(lambda2), float(lambda3), float(lambda4)))
+        
     model.epoch += 1
     return loss
-
 
 def train_dg_pinn(model, optimizer, X_train, iters=50001, stopping_loss=1e-3,
            epoch_loss_d=[]):
@@ -112,56 +138,39 @@ def train_dg_pinn(model, optimizer, X_train, iters=50001, stopping_loss=1e-3,
         if epoch % 10000 == 0:
             print('Epoch %d, time = %e, loss = %e,  lambda1 = %e' %
                   (epoch, float(t2-t1), float(loss),  model.beta.item()))
-            
-        u_pred = model(X_validation['x'], X_validation['t'])
-
-        # Calculate relative L2 errors
-        u_error = relative_l2_error(u_pred, X_validation['u'])
-
-        # Stopping condition
-        if u_error < stopping_loss:
-            print(f'Stopping early at epoch {epoch} as relative l2 error fell below {stopping_loss}')
-            break
         
     return epoch_loss_d
 
 def train_pinn(model, optimizer, X_train, NTK, iters=50001, stopping_loss=1e-2):
     for epoch in range(iters):
-        global lambda1, lambda2
-        t1 = default_timer()
+        global lambda1, lambda2, lambda3, lambda4
+        # t1 = default_timer()
         optimizer.zero_grad()
         # Calculate losses
-        loss_r, loss_d = model.losses(X_train)
+        loss_r, loss_i, loss_b, loss_d = model.losses(X_train)
     
         # Calculate total loss with updated alpha1
-        loss = lambda1*loss_r + lambda2*loss_d
+        loss = lambda1*loss_r + lambda2*loss_i + lambda3*loss_b + lambda4*loss_d
         loss.backward()
         optimizer.step()
 
         # Append losses for monitoring
         epoch_loss_r.append(loss_r.item())
+        epoch_loss_i.append(loss_i.item())
+        epoch_loss_b.append(loss_b.item())
         epoch_loss_d.append(loss_d.item())
         epoch_beta.append(model.beta.item())
         epoch_lambda1.append(lambda1)
         epoch_lambda2.append(lambda2)
-        t2 = default_timer()
+        epoch_lambda3.append(lambda3)
+        epoch_lambda4.append(lambda4)
         if epoch % 10000 == 0:
-            print('Epoch %d, time = %e, loss = %e, loss_r = %e, loss_d = %e, alpha = %e, lambda1= %e , lambda2= %e' %
-                  (epoch, float(t2-t1), float(loss), float(loss_r), float(loss_d),
-                    model.beta.item(), float(lambda1), float(lambda2)))
+            print('Epoch %d, loss = %e, loss_r = %e, loss_i = %e, loss_b = %e, loss_d = %e, beta = %e, lambda1= %e , lambda2= %e, lambda3= %e, lambda4=%e' %
+                  (epoch, float(loss), float(loss_r), float(loss_i), float(loss_b), float(loss_d),
+                    model.beta.item(), float(lambda1), float(lambda2), float(lambda3), float(lambda4)))
 
         if NTK == 'True' and epoch % 1000 == 0:
-            lambda1, lambda2 = Adap_weights(model, X_train)
-
-        u_pred = model(X_validation['x'], X_validation['t'])
-
-        # Calculate relative L2 errors
-        u_error = relative_l2_error(u_pred, X_validation['u'])
-
-        # Stopping condition
-        if u_error < stopping_loss:
-            print(f'Stopping early at epoch {epoch} as relative l2 error fell below {stopping_loss}')
-            break
+            lambda1, lambda2, lambda3, lambda4 = Adap_weights(model, X_train)
 
 def add_noise(signal, snr_db):
     # Calculate signal power and convert SNR from dB
@@ -176,12 +185,13 @@ def add_noise(signal, snr_db):
     # Add noise to the signal
     return signal + noise
 
-def get_data(c, batch_sizes, snr_db):
+def get_data(beta, batch_sizes, snr_db):
     # Load and scale data
     x = np.linspace(0, 1, 201)
     t = np.linspace(0, 1, 201)
     X, T = np.meshgrid(x, t)
-    U = np.exp(-T)*np.sin(np.pi*c*X)
+    # U = np.exp(-T)*np.sin(np.pi*c*X)
+    U = np.exp(-(10*np.pi*beta)**2*T)*np.sin(10*np.pi*X)
 
     # Flatten arrays
     x_true = X.flatten('C')[:, None]
@@ -195,8 +205,8 @@ def get_data(c, batch_sizes, snr_db):
     # Define indices for initial, boundary, PDE, and data points
     id_initial = np.where(t_true == 0)[0]
     id_bounds = np.where((x_true == 0) | (x_true == 1))[0]
-    id_pde = np.setdiff1d(np.arange(total_points), np.union1d(id_initial, id_bounds))
-    id_data = np.setdiff1d(np.arange(total_points), np.union1d(id_initial, id_bounds))
+    id_pde = np.arange(total_points)
+    id_data = np.arange(total_points)
     # Random selection function
     def random_selection(id_set, size):
         np.random.seed(seeds_num)
@@ -223,32 +233,18 @@ def get_data(c, batch_sizes, snr_db):
     all_train_ids = np.union1d(id_initial, np.union1d(id_bounds, np.union1d(id_pde, id_data)))
     # Create the validation set
     id_remaining = np.setdiff1d(np.arange(total_points), all_train_ids)
-    id_validation = random_selection(id_remaining, batch_sizes['validation'])
-
-    # Update id_data to exclude validation points for the test set
-    all_used_ids = np.union1d(id_validation, np.union1d(id_initial, np.union1d(id_bounds, np.union1d(id_pde, id_data))))
-
-    # Create a boolean mask for all points, then exclude the training indices
-    mask = np.ones(total_points, dtype=bool)
-    mask[all_used_ids] = False
-
-    X_validation = {'x': torch.from_numpy(x_true[id_validation, :]).float().to(device),
-                    't': torch.from_numpy(t_true[id_validation, :]).float().to(device),
-                    'u': torch.from_numpy(u_noisy[id_validation, :]).float().to(device)}
 
     # Use the mask to select the remaining points for X_test
-    X_test = {'x': torch.from_numpy(x_true[mask, :]).float().to(device),
-              't': torch.from_numpy(t_true[mask, :]).float().to(device),
-              'u': torch.from_numpy(u_true[mask, :]).float().to(device)}
+    X_test = {'x': torch.from_numpy(x_true[id_remaining, :]).float().to(device),
+              't': torch.from_numpy(t_true[id_remaining, :]).float().to(device),
+              'u': torch.from_numpy(u_true[id_remaining, :]).float().to(device)}
     
     # Use the mask to select the remaining points for X_test
     X_true = {'x': torch.from_numpy(x_true).float().to(device),
               't': torch.from_numpy(t_true).float().to(device),
               'u': torch.from_numpy(u_true).float().to(device)}
 
-
-    return u_noisy, X, T, U, X_train, X_validation, X_test, X_true
-
+    return u_noisy, X, T, U, X_train, X_test, X_true
 
 def Adap_weights(model, X_train):
     # Zero out gradients
@@ -289,14 +285,42 @@ def Adap_weights(model, X_train):
         for i in range(len(residuals)):
             grad_outputs = torch.zeros_like(residuals)
             grad_outputs[i] = 1
-
             # Compute gradients and immediately move them to CPU
             grads = [g.cpu() if g is not None else None for g in torch.autograd.grad(residuals, param_tensors, grad_outputs, allow_unused=True, create_graph=True)]
             grad_row = torch.cat([g.view(-1) if g is not None else torch.zeros(p.numel()) for g, p in zip(grads, param_tensors_cpu)])
             jacobian_r[start_idx + i] = grad_row
 
-    x = torch.cat([X_train['data']['x'].requires_grad_(), X_train['initial']['x'].requires_grad_(), X_train['bounds']['x'].requires_grad_()])
-    t = torch.cat([X_train['data']['t'].requires_grad_(), X_train['initial']['t'].requires_grad_(), X_train['bounds']['t'].requires_grad_()])
+    x = X_train['initial']['x'].requires_grad_()
+    t = X_train['initial']['t'].requires_grad_()
+    u_pred = model(x, t)
+    # Create jacobian matrix of data loss on CPU
+    jacobian_i = torch.zeros(len(u_pred), sum(p.numel() for p in param_tensors)).cpu()
+
+    for i in range(len(u_pred)):
+        grad_outputs = torch.zeros_like(u_pred)
+        grad_outputs[i] = 1
+        # Compute gradients and immediately move them to CPU
+        grads = [g.cpu() if g is not None else None for g in torch.autograd.grad(u_pred, param_tensors, grad_outputs, allow_unused=True, create_graph=True)]
+        grad_row = torch.cat([g.view(-1) if g is not None else torch.zeros(p.numel()) for g, p in zip(grads, param_tensors_cpu)])
+        jacobian_i[i] = grad_row
+
+    x = X_train['bounds']['x'].requires_grad_()
+    t = X_train['bounds']['t'].requires_grad_()
+    u_pred = model(x, t)
+
+    # Create jacobian matrix of data loss on CPU
+    jacobian_b = torch.zeros(len(u_pred), sum(p.numel() for p in param_tensors)).cpu()
+
+    for i in range(len(u_pred)):
+        grad_outputs = torch.zeros_like(u_pred)
+        grad_outputs[i] = 1
+        # Compute gradients and immediately move them to CPU
+        grads = [g.cpu() if g is not None else None for g in torch.autograd.grad(u_pred, param_tensors, grad_outputs, allow_unused=True, create_graph=True)]
+        grad_row = torch.cat([g.view(-1) if g is not None else torch.zeros(p.numel()) for g, p in zip(grads, param_tensors_cpu)])
+        jacobian_b[i] = grad_row
+
+    x = X_train['data']['x'].requires_grad_()
+    t = X_train['data']['t'].requires_grad_()
     
     # Divide data into batches
     total_data = x.shape[0]
@@ -316,12 +340,10 @@ def Adap_weights(model, X_train):
         
         # Compute model predictions and derivatives for the batch
         u_pred = model(x_batch, t_batch)
-
         # Now process residuals_batch
         for i in range(len(u_pred)):
             grad_outputs = torch.zeros_like(u_pred)
             grad_outputs[i] = 1
-
             # Compute gradients and immediately move them to CPU
             grads = [g.cpu() if g is not None else None for g in torch.autograd.grad(u_pred, param_tensors, grad_outputs, allow_unused=True, create_graph=True)]
             grad_row = torch.cat([g.view(-1) if g is not None else torch.zeros(p.numel()) for g, p in zip(grads, param_tensors_cpu)])
@@ -329,18 +351,24 @@ def Adap_weights(model, X_train):
 
     # Adapative weightings
     Krr = jacobian_r @ jacobian_r.T
+    Kii = jacobian_i @ jacobian_i.T
+    Kbb = jacobian_b @ jacobian_b.T
     Kdd = jacobian_d @ jacobian_d.T
 
-    K_trace = torch.trace(Krr)/batch_sizes['PDE'] +\
-         torch.trace(Kdd)/(batch_sizes['initial'] + batch_sizes['bounds'] + batch_sizes['data']) 
+    K_trace = torch.trace(Krr)/batch_sizes['PDE'] + torch.trace(Kii)/batch_sizes['initial'] +\
+        torch.trace(Kbb)/batch_sizes['bounds'] + torch.trace(Kdd)/batch_sizes['data']
     epsilon = 1e-8  # Small regularization term
     lambda_r = K_trace / (torch.trace(Krr)/batch_sizes['PDE'] + epsilon)
-    lambda_d = K_trace / (torch.trace(Kdd)/(batch_sizes['initial'] + batch_sizes['bounds'] + batch_sizes['data']) + epsilon) 
+    lambda_i = K_trace / (torch.trace(Kii)/batch_sizes['initial'] + epsilon)
+    lambda_b = K_trace / (torch.trace(Kbb)/batch_sizes['bounds'] + epsilon)
+    lambda_d = K_trace / (torch.trace(Kdd)/batch_sizes['data'] + epsilon) 
 
     lambda1 = (lambda_r.item())
-    lambda2 = (lambda_d.item())
+    lambda2 = (lambda_i.item())
+    lambda3 = (lambda_b.item())
+    lambda4 = (lambda_d.item())
 
-    return lambda1, lambda2
+    return lambda1, lambda2, lambda3, lambda4
 
 # Compute the relative L2 error
 def relative_l2_error(pred, true):
@@ -353,10 +381,10 @@ seeds_num = 666
 torch.manual_seed(seeds_num)
 np.random.seed(seeds_num)
 beta = np.random.rand()
-lambda_1_true = 10
-batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 1000, 'data': 10000, 'validation': 10000}
-epsilon_1 = 0.05
-iter_1 = 200000 # Maximun number of iterations for Adam optimizer
+
+beta_1_true = 1/(20)
+batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 2000, 'data': 10000}
+iter_1 = 50000 # Maximun number of iterations for Adam optimizer
 iter_2 = 20000  # Maximun number  of iterations for L-BFGS optimizer
 
 SNR = [40, 35, 30, 25]
@@ -366,7 +394,7 @@ SNR = [40, 35, 30, 25]
 # =============================================================================
 for snr in SNR:
     torch.manual_seed(seeds_num)
-    u_noisy, X, T, U, X_train, X_validation, X_test, X_true = get_data(lambda_1_true, batch_sizes, snr)
+    u_noisy, X, T, U, X_train, X_test, X_true = get_data(beta_1_true, batch_sizes, snr)
     epoch_loss_r = []
     epoch_loss_i = []
     epoch_loss_b = []
@@ -382,15 +410,15 @@ for snr in SNR:
         output_dim=1,
         hidden_dim=100,
         num_hidden=3, 
-        activation='sin'
+        activation='tanh'
     ).to(device)
     print(model)
 
     t11 = default_timer()
     # Adam optimizer to decrease loss in Phase 1
     optimizer = torch.optim.Adam(list(model.parameters()), lr=1e-3)
-    epoch_loss_d = train_dg_pinn(model, optimizer, X_train, iters=iter_1, stopping_loss=epsilon_1, epoch_loss_d=[])
-    lambda1, lambda2 = Adap_weights(model, X_train)
+    epoch_loss_d = train_dg_pinn(model, optimizer, X_train, iters=iter_1, epoch_loss_d=[])
+    lambda1, lambda2, lambda3, lambda4 = Adap_weights(model, X_train)
 
     # L-BFGS optimizer for fine-tuning in Phase 2
     optimizer = torch.optim.LBFGS(list(model.parameters()), lr=1e-1, max_iter=1,
@@ -418,6 +446,6 @@ for snr in SNR:
     U_pred = U_pred.cpu().detach().numpy()    
     
     savemat(f'dgpinn_heat_NTK_noise_SNR_{snr}.mat',
-            {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_noise': u_noisy.reshape(201,201), 'u_true': U, 'loss_r': epoch_loss_r, 
-              'loss_d': epoch_loss_d, 'beta': epoch_beta, 'lambda1': epoch_lambda1, 'lambda2': epoch_lambda2, 'time': t22 - t11})
-    
+            {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_noise': u_noisy.reshape(201,201),'u_true': U, 
+             'loss_r': epoch_loss_r, 'loss_i': epoch_loss_i,'loss_b': epoch_loss_b,'loss_d': epoch_loss_d, 'beta': epoch_beta, 
+             'lambda1': epoch_lambda1, 'lambda2': epoch_lambda2, 'lambda3': epoch_lambda3, 'lambda4': epoch_lambda4, 'time': t22 - t11})
