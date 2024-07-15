@@ -74,6 +74,7 @@ class PINN(nn.Module):
     # Define the loss function
     def loss_PDE(self, x, y, t):
         continuity, x_momentum, y_momentum = self.Navier_Stokes_Eq(x, y, t)
+        #loss_r = torch.mean(continuity**2 + x_momentum**2 + y_momentum**2)
         loss_r1 = torch.mean(x_momentum**2)
         loss_r2 = torch.mean(y_momentum**2)
         loss_r3 = torch.mean(continuity**2)
@@ -86,6 +87,7 @@ class PINN(nn.Module):
         p_pred = pred[:,2:3]
         loss_du = torch.mean((u - u_pred)**2)
         loss_dv = torch.mean((v - v_pred)**2)
+        # loss_d = loss_du + loss_dv + loss_dp
         return loss_du, loss_dv
 
     # Prediction
@@ -95,7 +97,7 @@ class PINN(nn.Module):
         v_pred = pred[:,1:2]
         # Relative L2 Norm of the error (Vector)  
         error_vec_u = torch.linalg.norm((u - u_pred),2) / torch.linalg.norm(u, 2)    
-        error_vec_v = torch.linalg.norm((v - v_pred),2) / torch.linalg.norm(v, 2)    
+        error_vec_v = torch.linalg.norm((v - v_pred),2) / torch.linalg.norm(v, 2)      
         return error_vec_u, error_vec_v
     
 def closure():
@@ -137,7 +139,7 @@ def closure():
     model.epoch += 1
     return loss
 
-def train_dg_pinn(model, optimizer, X_train, iters=50001, stopping_loss=1e-2):
+def train_dg_pinn(model, optimizer, X_train, iters=50001):
     for epoch in range(iters):
         t1 = default_timer()
         optimizer.zero_grad()
@@ -153,15 +155,15 @@ def train_dg_pinn(model, optimizer, X_train, iters=50001, stopping_loss=1e-2):
         #     print('Epoch %d, time = %e, loss = %e, loss_du = %e, loss_dv = %e, loss_dp = %e,  alpha1 = %e,  alpha2 = %e' %
         #           (epoch, float(t2-t1), float(loss),  float(loss_du),  float(loss_dv),   model.alpha1.item(),  model.alpha2.item()))
             
-        error_vec_u, error_vec_v = model.model_test(X_validation['x'], X_validation['y'], X_validation['t'],
-                                                                    X_validation['u'], X_validation['v'])
-        rl2_err = (error_vec_u + error_vec_v)/2
-        # Stopping condition
-        if rl2_err < stopping_loss:
-            print(f'Stopping early at epoch {epoch} as relative l2 error fell below {stopping_loss}')
-            break
+        # error_vec_u, error_vec_v = model.model_test(X_validation['x'], X_validation['y'], X_validation['t'],
+        #                                                             X_validation['u'], X_validation['v'])
+        # rl2_err = (error_vec_u + error_vec_v)/2
+        # # Stopping condition
+        # if rl2_err < stopping_loss:
+        #     print(f'Stopping early at epoch {epoch} as relative l2 error fell below {stopping_loss}')
+        #     break
 
-def train_pinn(model, optimizer, X_train, NTK, iters=50001, stopping_loss=1e-2):
+def train_pinn(model, optimizer, X_train, NTK, iters=50001):
     for epoch in range(iters):
         global lambda1, lambda2, lambda3, lambda4, lambda5
         # Zero gradients
@@ -192,13 +194,13 @@ def train_pinn(model, optimizer, X_train, NTK, iters=50001, stopping_loss=1e-2):
         epoch_lambda4.append(lambda4)
         epoch_lambda5.append(lambda5)
 
-        error_vec_u, error_vec_v = model.model_test(X_validation['x'], X_validation['y'], X_validation['t'],
-                                                                    X_validation['u'], X_validation['v'])
-        rl2_err = (error_vec_u + error_vec_v)/2
-        # Stopping condition
-        if rl2_err < stopping_loss:
-            print(f'Stopping early at epoch {epoch} as relative l2 error fell below {stopping_loss}')
-            break
+        # error_vec_u, error_vec_v = model.model_test(X_validation['x'], X_validation['y'], X_validation['t'],
+        #                                                             X_validation['u'], X_validation['v'])
+        # rl2_err = (error_vec_u + error_vec_v)/2
+        # # Stopping condition
+        # if rl2_err < stopping_loss:
+        #     print(f'Stopping early at epoch {epoch} as relative l2 error fell below {stopping_loss}')
+        #     break
 
         if NTK == 'True' and epoch % 1000 == 0:
             lambda1, lambda2, lambda3, lambda4, lambda5 = Adap_weights(model, X_train)
@@ -232,6 +234,7 @@ def get_data(batch_sizes):
     data4 = data3[:, :][data3[:, 0] <= 8]
     data5 = data4[:, :][data4[:, 1] >= -2]
     data_domain = data5[:, :][data5[:, 1] <= 2]
+    # choose number of training points
     # Total points
     total_points = data_domain.shape[0]
     # Define indices for iPDE, and data points
@@ -262,20 +265,20 @@ def get_data(batch_sizes):
     all_train_ids = np.union1d(id_pde, id_data)
     # Create the validation set
     id_remaining = np.setdiff1d(np.arange(total_points), all_train_ids)
-    id_validation = random_selection(id_remaining, batch_sizes['validation'])
+    # id_validation = random_selection(id_remaining, batch_sizes['validation'])
 
-    # Update id_data to exclude validation points for the test set
-    all_used_ids = np.union1d(id_validation, np.union1d(id_pde, id_data))
+    # # Update id_data to exclude validation points for the test set
+    # all_used_ids = np.union1d(id_validation, np.union1d(id_pde, id_data))
 
-    # Create a boolean mask for all points, then exclude the training indices
-    mask = np.ones(total_points, dtype=bool)
-    mask[all_used_ids] = False
+    # # Create a boolean mask for all points, then exclude the training indices
+    # mask = np.ones(total_points, dtype=bool)
+    # mask[all_used_ids] = False
 
-    X_validation = to_tensor(id_validation)
-    X_test = to_tensor(mask)
+    # X_validation = to_tensor(id_validation)
+    X_test = to_tensor(id_remaining)
     X_true = to_tensor(ids_total)
 
-    return X_train, X_validation, X_test, X_true
+    return X_train, X_test, X_true
 
 def Adap_weights(model, X_train):
     # Zero out gradients
@@ -290,7 +293,7 @@ def Adap_weights(model, X_train):
     t = X_train['PDE']['t'].requires_grad_()
 
     # Divide data into batches
-    batch_size = 200
+    batch_size = 100
     total_data = x.shape[0]
     batches = (total_data + batch_size - 1) // batch_size
 
@@ -356,7 +359,7 @@ def Adap_weights(model, X_train):
 
     # Divide data into batches
     total_data = x.shape[0]
-    batch_size = 200
+    batch_size = 100
     batches = (total_data + batch_size - 1) // batch_size
 
     # Initialize Jacobian matrix
@@ -376,7 +379,6 @@ def Adap_weights(model, X_train):
         pred = model(x_batch, y_batch, t_batch)
         u_pred = pred[:,0:1]
         v_pred = pred[:,1:2]
-
         # Now process residuals_batch
         for i in range(len(u_pred)):
             grad_outputs = torch.zeros_like(u_pred)
@@ -426,20 +428,20 @@ seeds_num = 666
 torch.manual_seed(seeds_num)
 np.random.seed(seeds_num)
 alpha = np.random.rand()
-epsilon_1 = 0.05  # Stopping criterion for Adam optimizer
-iter_1 = 200000 # Maximun number of iterations for Adam optimizer
-iter_2 = 20000  # Maximun number  of iterations for L-BFGS optimizer
-data_nums = [100,200,300,400,500,1000,2000,3000,4000,5000,6000,7000,8000,9000,10000]
-batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 1000, 'data': 10000, 'validation': 10000}
-_, X_validation, X_test, X_true = get_data(batch_sizes)
+
+iter_1 = 20000 # Maximun number of iterations for Adam optimizer
+iter_2 = 10000  # Maximun number  of iterations for L-BFGS optimizer
+data_nums = [500,600,700,800,900,1000,2000,3000,4000,5000,6000,7000,8000,9000,10000]
+batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 2000, 'data': 10000}
+_, X_test, X_true = get_data(batch_sizes)
 
 # =============================================================================
 # TRAIN MODEL
 # =============================================================================
 for data_num in data_nums:
     torch.manual_seed(seeds_num)
-    batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 1000, 'data': data_num, 'validation': 10000}
-    X_train, _, _, _ = get_data(batch_sizes)
+    batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 2000, 'data': data_num}
+    X_train, _, _ = get_data(batch_sizes)
     epoch_loss_r1 = []
     epoch_loss_r2 = []
     epoch_loss_r3 = []
@@ -458,14 +460,14 @@ for data_num in data_nums:
         output_dim=3,
         hidden_dim=100,
         num_hidden=3, 
-        activation='sin'
+        activation='tanh'
     ).to(device)
     print(model)
 
     t11 = default_timer()
     # Adam optimizer to decrease loss in Phase 1
     optimizer = torch.optim.Adam(list(model.parameters()), lr=1e-3)
-    train_dg_pinn(model, optimizer, X_train, iters=iter_1, stopping_loss=epsilon_1)
+    train_dg_pinn(model, optimizer, X_train, iters=iter_1)
 
     lambda1, lambda2, lambda3, lambda4, lambda5 = Adap_weights(model, X_train)
 

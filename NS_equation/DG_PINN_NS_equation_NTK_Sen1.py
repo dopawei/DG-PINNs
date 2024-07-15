@@ -425,19 +425,23 @@ def relative_l2_error(pred, true):
 # DATA & PARAMETERS
 # =============================================================================
 
+seeds_num = 666
+torch.manual_seed(seeds_num)
+np.random.seed(seeds_num)
+alpha = np.random.rand()
 batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 2000, 'data': 10000}
-iter_1 = 20000 # Maximun number of iterations for Adam optimizer
+# stopping_conditions = [0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01,
+#              0.009, 0.008, 0.007, 0.006, 0.005]
+iter_1s = [2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 
+          15000, 20000, 25000, 30000, 40000, 50000]
 iter_2 = 10000  # Maximun number  of iterations for L-BFGS optimizer
-seeds_nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+X_train, X_test, X_true = get_data(batch_sizes)
+
 # =============================================================================
 # TRAIN MODEL
 # =============================================================================
-for seeds_num in seeds_nums:
+for iter_1 in iter_1s:
     torch.manual_seed(seeds_num)
-    np.random.seed(seeds_num)
-    alpha = np.random.rand()
-
-    X_train, X_test, X_true = get_data(batch_sizes)
     epoch_loss_r1 = []
     epoch_loss_r2 = []
     epoch_loss_r3 = []
@@ -464,10 +468,8 @@ for seeds_num in seeds_nums:
     # Adam optimizer to decrease loss in Phase 1
     optimizer = torch.optim.Adam(list(model.parameters()), lr=1e-3)
     train_dg_pinn(model, optimizer, X_train, iters=iter_1)
-    #train_pinn(model, optimizer, X_train, iters=iter_1, stopping_loss=stopping_loss)
 
     lambda1, lambda2, lambda3, lambda4, lambda5 = Adap_weights(model, X_train)
-    # print(lambda1, lambda2, lambda3, lambda4, lambda5, lambda6)
 
     # L-BFGS optimizer for fine-tuning in Phase 2
     optimizer = torch.optim.LBFGS(list(model.parameters()), lr=1e-1, max_iter=1,
@@ -508,83 +510,7 @@ for seeds_num in seeds_nums:
     p_pred = pred[:,2:3].cpu().detach().numpy()
 
     # Save data and model
-    savemat(f'dgpinn_NS_NTK_seed_{seeds_num}.mat',
-            {'u_pred0': u_pred0, 'v_pred0': v_pred0, 'p_pred0': p_pred0, 'u_test': u_test, 'v_test': v_test, 'p_test': p_test, 
-             'u_pred': u_pred, 'v_pred': v_pred, 'p_pred': p_pred, 'u_true': u_true, 'v_true': v_true, 'p_true': p_true, 
-            'loss_r1': epoch_loss_r1, 'loss_r2': epoch_loss_r2, 'loss_r3': epoch_loss_r3, 
-            'loss_du': epoch_loss_du, 'loss_dv': epoch_loss_dv, 
-            'lambd1': epoch_lambda1, 'lambd2': epoch_lambda2, 'lambd3': epoch_lambda3, 
-            'lambd4': epoch_lambda4, 'lambd5': epoch_lambda5, 
-            'alpha1': epoch_alpha1, 'alpha2': epoch_alpha2, 'time': t22 - t11})
-    
-
-    epoch_loss_r1 = []
-    epoch_loss_r2 = []
-    epoch_loss_r3 = []
-    epoch_loss_du = []
-    epoch_loss_dv = []
-    epoch_alpha1= []
-    epoch_alpha2= []
-    epoch_lambda1 = []
-    epoch_lambda2 = []
-    epoch_lambda3 = []
-    epoch_lambda4 = []
-    epoch_lambda5 = []
-
-    model = PINN(
-        input_dim=3,
-        output_dim=3,
-        hidden_dim=100,
-        num_hidden=3, 
-        activation='tanh'
-    ).to(device)
-    print(model)
-
-    t11 = default_timer()
-    lambda1 = 1e0; lambda2 = 1e0; lambda3 = 1e0; lambda4 = 1e0; lambda5 = 1e0
-    # Adam optimizer to decrease loss in Phase 1
-    optimizer = torch.optim.Adam(list(model.parameters()), lr=1e-3)
-    train_pinn(model, optimizer, X_train, NTK='True', iters=iter_1)
-    # L-BFGS optimizer for fine-tuning in Phase 2
-    optimizer = torch.optim.LBFGS(list(model.parameters()), lr=1e-1, max_iter=1,
-                                history_size=100)
-    for epoch in range(iter_2):
-        optimizer.zero_grad()
-        optimizer.step(closure)
-
-    t22 = default_timer()
-    print('Time elapsed: %.2f min' % ((t22 - t11) / 60))
-
-    # =============================================================================
-    # SAVE DATA & MODEL
-    # =============================================================================
-
-    error_vec_u, error_vec_v = model.model_test(X_test['x'], X_test['y'], X_test['t'], X_test['u'], X_test['v'])
-    print('Test Error: %.5f'  % (error_vec_u))
-    print('Test Error: %.5f'  % (error_vec_v))
-
-    pred = model(X_test['x'], X_test['y'], X_test['t'])
-
-    u_test = X_test['u'].cpu().detach().numpy()
-    v_test = X_test['v'].cpu().detach().numpy()
-    p_test = X_test['p'].cpu().detach().numpy()
-
-    u_pred0 = pred[:,0:1].cpu().detach().numpy()
-    v_pred0 = pred[:,1:2].cpu().detach().numpy()
-    p_pred0 = pred[:,2:3].cpu().detach().numpy()
-
-    pred = model(X_true['x'], X_true['y'], X_true['t'])
-
-    u_true = X_true['u'].cpu().detach().numpy()
-    v_true = X_true['v'].cpu().detach().numpy()
-    p_true = X_true['p'].cpu().detach().numpy()
-
-    u_pred = pred[:,0:1].cpu().detach().numpy()
-    v_pred = pred[:,1:2].cpu().detach().numpy()
-    p_pred = pred[:,2:3].cpu().detach().numpy()
-
-    # Save data and model
-    savemat(f'pinn_NS_NTK_seed_{seeds_num}.mat',
+    savemat(f'dgpinn_NS_NTK_iter_1_{iter_1}.mat',
             {'u_pred0': u_pred0, 'v_pred0': v_pred0, 'p_pred0': p_pred0, 'u_test': u_test, 'v_test': v_test, 'p_test': p_test, 
              'u_pred': u_pred, 'v_pred': v_pred, 'p_pred': p_pred, 'u_true': u_true, 'v_true': v_true, 'p_true': p_true, 
             'loss_r1': epoch_loss_r1, 'loss_r2': epoch_loss_r2, 'loss_r3': epoch_loss_r3, 
