@@ -172,7 +172,7 @@ def train_pinn(model, optimizer, X_train, NTK, iters=50001):
         epoch_lambda_b1.append(lambda_b1)
         epoch_lambda_b2.append(lambda_b2)
         epoch_lambda_d.append(lambda_d)
-        
+
         t2 = default_timer()
         # Print losses infrequently to avoid slowing down training
         if model.epoch % 10000 == 0:
@@ -399,7 +399,6 @@ def Adap_weights(model, X_train):
 
     return lambda_r.item(), lambda_i1.item(), lambda_i2.item(), lambda_b1.item(), lambda_b2.item(), lambda_d.item()
 
-
 # Compute the relative L2 error
 def relative_l2_error(pred, true):
     return torch.norm(pred - true) / torch.norm(true)
@@ -407,24 +406,25 @@ def relative_l2_error(pred, true):
 # =============================================================================
 # DATA & PARAMETERS
 # =============================================================================
+seeds_num = 666
+torch.manual_seed(seeds_num)
+np.random.seed(seeds_num)
+alpha = np.random.rand()
 
 alpha_true = 1
-epsilon_1 = 0.05
-epsilon_2 = 0.005
-iter_1 = 20000 # Maximun number of iterations for Adam optimizer
+
+batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 2000, 'data': 10000}
+X, T, U, X_train, X_test, X_true = get_data(alpha_true, batch_sizes)
+
+iter_1s = [2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 
+          15000, 20000, 25000, 30000, 40000, 50000]
 iter_2 = 10000  # Maximun number  of iterations for L-BFGS optimizer
-seeds_nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 # =============================================================================
 # TRAIN MODEL
 # =============================================================================
-
-for seeds_num in seeds_nums:
+for iter_1 in iter_1s:
     torch.manual_seed(seeds_num)
-    np.random.seed(seeds_num)
-    alpha = np.random.rand()
-    batch_sizes = {'initial': 100, 'bounds': 200, 'PDE': 2000, 'data': 10000}
-    X, T, U, X_train, X_test, X_true = get_data(alpha_true, batch_sizes)
     epoch_loss_r = []
     epoch_loss_i1 = []
     epoch_loss_i2 = []
@@ -438,6 +438,8 @@ for seeds_num in seeds_nums:
     epoch_lambda_b1 = []
     epoch_lambda_b2 = []
     epoch_lambda_d = []
+
+
     model = PINN(
         input_dim=2,
         output_dim=1,
@@ -451,7 +453,7 @@ for seeds_num in seeds_nums:
     # Adam optimizer to decrease loss in Phase 1
     optimizer = torch.optim.Adam(list(model.parameters()), lr=1e-3)
     train_dg_pinn(model, optimizer, X_train, iters=iter_1)
-
+            
     lambda_r, lambda_i1, lambda_i2, lambda_b1, lambda_b2, lambda_d = Adap_weights(model, X_train)
 
     # L-BFGS optimizer for fine-tuning in Phase 2
@@ -463,7 +465,6 @@ for seeds_num in seeds_nums:
 
     t22 = default_timer()
     print('Time elapsed: %.2f min' % ((t22 - t11) / 60), 'alpha: %.4f' % (model.alpha.item()))
-
     # =============================================================================
     # SAVE DATA & MODEL
     # =============================================================================
@@ -479,72 +480,7 @@ for seeds_num in seeds_nums:
     U_pred = model(X_true['x'], X_true['t'])
     U_pred = U_pred.cpu().detach().numpy()    
     
-    savemat(f'dgpinn_beam_NTK_seed_{seeds_num}.mat',
-            {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_true': U, 'loss_r': epoch_loss_r, 'loss_i1': epoch_loss_i1,
-             'loss_i2': epoch_loss_i2, 'loss_b1': epoch_loss_b1,'loss_b2': epoch_loss_b2,'loss_d': epoch_loss_d, 'alpha': epoch_alpha, 'lambda_r': epoch_lambda_r, 
-             'lambda_i1': epoch_lambda_i1, 'lambda_i2': epoch_lambda_i2, 'lambda_b1': epoch_lambda_b1, 'lambda_b2': epoch_lambda_b2,'lambda_d': epoch_lambda_d, 'time': t22 - t11})
-    
-
-    epoch_loss_r = []
-    epoch_loss_i1 = []
-    epoch_loss_i2 = []
-    epoch_loss_b1 = []
-    epoch_loss_b2 = []
-    epoch_loss_d = []
-    epoch_alpha = []
-    epoch_lambda_r = []
-    epoch_lambda_i1 = []
-    epoch_lambda_i2 = []
-    epoch_lambda_b1 = []
-    epoch_lambda_b2 = []
-    epoch_lambda_d = []
-
-    model = PINN(
-        input_dim=2,
-        output_dim=1,
-        hidden_dim=100,
-        num_hidden=3, 
-        activation='tanh'
-    ).to(device)
-    print(model)
-
-    lambda1=1e0
-    lambda2=1e0
-    lambda3=1e0
-    lambda4=1e0
-    t11 = default_timer()
-    # Adam optimizer to decrease loss in Phase 1
-    optimizer = torch.optim.Adam(list(model.parameters()), lr=1e-3)
-    train_pinn(model, optimizer, X_train, NTK='True', iters=iter_1)
-    
-    # L-BFGS optimizer for fine-tuning in Phase 2
-    optimizer = torch.optim.LBFGS(list(model.parameters()), lr=1e-1, max_iter=1,
-                                history_size=100)
-    for epoch in range(iter_2):
-        # t1 = default_timer()
-        optimizer.zero_grad()
-        optimizer.step(closure)
-        # t2 = default_timer()
-
-    t22 = default_timer()
-    print('Time elapsed: %.2f min' % ((t22 - t11) / 60), 'alpha: %.4f' % (model.alpha.item()))
-
-    # =============================================================================
-    # SAVE DATA & MODEL
-    # =============================================================================
-
-    u_pred = model(X_test['x'], X_test['t'])
-        
-    # Calculate relative L2 errors
-    u_error = relative_l2_error(u_pred, X_test['u'])
-    print(u_error.item())
-    u_pred = u_pred.cpu().detach().numpy()    
-    u_test = X_test['u'].cpu().detach().numpy()   
-
-    U_pred = model(X_true['x'], X_true['t'])
-    U_pred = U_pred.cpu().detach().numpy()    
-    
-    savemat(f'pinn_beam_NTK_seed_{seeds_num}.mat',
+    savemat(f'dgpinn_beam_NTK_iter_1_{iter_1}.mat',
             {'u_pred': u_pred, 'u_test': u_test, 'U_pred': U_pred.reshape(201,201), 'u_true': U, 'loss_r': epoch_loss_r, 'loss_i1': epoch_loss_i1,
              'loss_i2': epoch_loss_i2, 'loss_b1': epoch_loss_b1,'loss_b2': epoch_loss_b2,'loss_d': epoch_loss_d, 'alpha': epoch_alpha, 'lambda_r': epoch_lambda_r, 
              'lambda_i1': epoch_lambda_i1, 'lambda_i2': epoch_lambda_i2, 'lambda_b1': epoch_lambda_b1, 'lambda_b2': epoch_lambda_b2,'lambda_d': epoch_lambda_d, 'time': t22 - t11})
