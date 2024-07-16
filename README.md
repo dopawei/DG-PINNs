@@ -1,5 +1,8 @@
 # DG-PINNs
-Data-guided physics-informed neural networks.
+This repository contains the code for the paper:
+- [Data-Guided Physics-Informed Neural Networks for Solving Inverse Problems in Partial Differential Equations](https://arxiv.org/abs/2407.10836)
+
+In this work, we proposed a new PINN framework: data-guided physics-informed neural networks.
 
 •	DG-PINNs: A novel two-phase framework for solving inverse problems in PDEs.\
 •	Pre-training phase focuses on data loss; fine-tuning phase embeds physical laws.\
