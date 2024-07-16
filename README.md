@@ -22,4 +22,13 @@ DG_PINN_heat_equation_NTK_Nd -- the sensitivity analysis on $N_d$ \
 DG_PINN_heat_equation_NTK_noise -- the study of the noise-robustness of DG-PINNs \
 DG_PINN_vs_PINN_heat_equation_NTK -- the study of the efficiency of PINNs and DG-PINNs
 
+# Citation
+
+@article{zhou2024dgpinn,
+  title={Data-Guided Physics-Informed Neural Networks for Solving Inverse Problems in Partial Differential Equations},
+  author={Wei Zhou, Y.F. Xu},
+  journal={arXiv preprint arXiv:2407.10836},
+  year={2024}
+}
+
 
