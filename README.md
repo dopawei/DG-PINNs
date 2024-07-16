@@ -22,12 +22,14 @@ DG_PINN_heat_equation_NTK_Nd -- the sensitivity analysis on $N_d$ \
 DG_PINN_heat_equation_NTK_noise -- the study of the noise-robustness of DG-PINNs \
 DG_PINN_vs_PINN_heat_equation_NTK -- the study of the efficiency of PINNs and DG-PINNs
 
+# Data for NS equation
+We use the same data in the original paper of PINN for the NS equation, which can be downloaded in this link https://github.com/maziarraissi/PINNs/blob/1b3e90e82c47d49aee290aa481550f5e9c582d9a/main/Data/cylinder_nektar_wake.mat
 # Citation
 
-@article{zhou2024dgpinn,
-  title={Data-Guided Physics-Informed Neural Networks for Solving Inverse Problems in Partial Differential Equations},
-  author={Wei Zhou, Y.F. Xu},
-  journal={arXiv preprint arXiv:2407.10836},
+@article{zhou2024dgpinn,\
+  title={Data-Guided Physics-Informed Neural Networks for Solving Inverse Problems in Partial Differential Equations},\
+  author={Wei Zhou, Y.F. Xu},\
+  journal={arXiv preprint arXiv:2407.10836},\
   year={2024}
 }
 
