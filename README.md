@@ -30,7 +30,7 @@ We use the same data in the original paper of PINN for the NS equation, which ca
   title={Data-Guided Physics-Informed Neural Networks for Solving Inverse Problems in Partial Differential Equations},\
   author={Wei Zhou, Y.F. Xu},\
   journal={arXiv preprint arXiv:2407.10836},\
-  year={2024}
+  year={2024}\
 }
 
 
